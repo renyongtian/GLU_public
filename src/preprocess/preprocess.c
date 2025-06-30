@@ -34,6 +34,23 @@ int my_DumpA(SNicsLU *nicslu, double **ax, unsigned int **ai, unsigned int **ap)
         *ap = NULL;
     }
 
+    // printf("row_perm: ");
+    // for(uint__t i=0; i<nicslu->n; ++i){
+    //     printf("%d ", nicslu->row_perm[i]);
+    // }
+    // printf("\nrow_perm_inv: ");
+    // for(uint__t i=0; i<nicslu->n; ++i){
+    //     printf("%d ", nicslu->row_perm_inv[i]);
+    // }
+    // printf("\ncol_perm: ");
+    // for(uint__t i=0; i<nicslu->n; ++i){
+    //     printf("%d ", nicslu->col_perm[i]);
+    // }
+    // printf("\ncol_perm_inv: ");
+    // for(uint__t i=0; i<nicslu->n; ++i){
+    //     printf("%d ", nicslu->col_perm_inv[i]);
+    // }
+    // printf("\n");
     n = nicslu->n;
     nnz = nicslu->nnz;
     ax0 = nicslu->ax;
@@ -99,7 +116,8 @@ FAIL:
     return -2;
 }
 
-int preprocess(char *matrixName, SNicsLU *nicslu, double **ax, unsigned int **ai, unsigned int **ap)
+int preprocess(char *matrixName, SNicsLU *nicslu, double **ax, unsigned int **ai, unsigned int **ap, \
+               double **ax_backup, unsigned int **ai_backup, unsigned int **ap_backup)
 {
     int ret;
     uint__t *n, *nnz;
@@ -112,7 +130,7 @@ int preprocess(char *matrixName, SNicsLU *nicslu, double **ax, unsigned int **ai
 
     printf("Reading matrix...\n");
 
-    ret = NicsLU_ReadTripletColumnToSparse(matrixName, n, nnz, ax, ai, ap);
+    ret = NicsLU_ReadTripletRowToSparse(matrixName, n, nnz, ax, ai, ap);
     if (ret == NICSLU_MATRIX_INVALID)
     {    
         printf("Read invalid matrix\n");
@@ -129,12 +147,25 @@ int preprocess(char *matrixName, SNicsLU *nicslu, double **ax, unsigned int **ai
         goto EXIT;
     }
 
+    // 备份原始数据（深拷贝）
+    *ax_backup = (double *)malloc((*nnz) * sizeof(double));
+    *ai_backup = (unsigned int *)malloc((*nnz) * sizeof(unsigned int));
+    *ap_backup = (unsigned int *)malloc((*n + 1) * sizeof(unsigned int));
+    
+    memcpy(*ax_backup, *ax, *nnz * sizeof(double));
+    memcpy(*ai_backup, *ai, *nnz * sizeof(unsigned int));
+    memcpy(*ap_backup, *ap, (*n + 1) * sizeof(unsigned int));
+
     NicsLU_CreateMatrix(nicslu, *n, *nnz, *ax, *ai, *ap);
     nicslu->cfgi[0] = 1;
     nicslu->cfgf[1] = 0;
 
     printf("Preprocessing matrix...\n");
 
+    // for(uint__t i=0; i < nicslu->nnz; ++i){
+    //     printf("%lf ", nicslu->ax[i]);
+    // }
+    // printf("\n");
     NicsLU_Analyze(nicslu);
     printf("Preprocessing time: %f ms\n", nicslu->stat[0] * 1000);
 

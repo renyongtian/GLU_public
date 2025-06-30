@@ -25,8 +25,11 @@ public:
     void predictLU(unsigned*, unsigned*, double*);
     void csr();
     void leveling();
-    void fill_in(unsigned*, unsigned*);
+    void fill_in(unsigned*, unsigned*, unsigned int);
     std::vector<REAL> solve(SNicsLU*, const std::vector<REAL> &);
+    std::vector<REAL> solve_CSR(SNicsLU*, const std::vector<REAL> &);
+    int updateNicsLUFromSymbolicMatrix(SNicsLU*, const Symbolic_Matrix&);
+    void ExtractLUToSymbolicMatrix(SNicsLU *nicslu);
 
 #if GLU_DEBUG
     void PrintLevel();

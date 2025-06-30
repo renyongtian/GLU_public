@@ -7,8 +7,9 @@
 #include <cmath>
 
 using namespace std;
+extern size_t g_sp;
 
-void Symbolic_Matrix :: fill_in(unsigned *ai, unsigned *ap)
+void Symbolic_Matrix :: fill_in(unsigned *ai, unsigned *ap, unsigned int nnz1)
 {
     sym_c_ptr.push_back(0);
     vector<unsigned> :: iterator it;
@@ -245,4 +246,171 @@ vector<REAL> Symbolic_Matrix::solve(SNicsLU *nicslu, const vector<REAL> &rhs)
 
 
     return x;
+}
+
+vector<REAL> Symbolic_Matrix::solve_CSR(SNicsLU *nicslu, const vector<REAL> &rhs)
+{
+    vector<REAL> b(n);
+    vector<REAL> x(n);
+    unsigned mc64_scale = nicslu->cfgi[1];
+
+    unsigned *rp = nicslu->row_perm;
+    unsigned *cp = nicslu->col_perm_inv;
+    int *piv = nicslu->pivot_inv;
+    double *rows = nicslu->row_scale;
+    double *cols = nicslu->col_scale_perm;
+
+    // Apply row permutation and scaling to rhs
+    if (mc64_scale) {
+        for (unsigned j = 0; j < n; ++j) {
+            unsigned p = rp[j];
+            b[j] = rhs[p] * rows[p];
+        }
+    } else {
+        for (unsigned j = 0; j < n; ++j) {
+            b[j] = rhs[rp[j]];
+        }
+    }
+
+    // Left-multiply inv(L) - lower triangular solve
+    for (unsigned j = 0; j < n; ++j) {
+        REAL sum = 0.0;
+        unsigned diag = l_col_ptr[j];
+        
+        for (unsigned p = sym_c_ptr[j]; p < l_col_ptr[j]; ++p) {
+            sum += val[p] * b[sym_r_idx[p]];
+        }
+        b[j] = (b[j] - sum) / val[diag];
+        // m_out << b[j] << " " << l_col_ptr[j] << " " << sum << endl;
+    }
+
+    // Left-multiply inv(U) - upper triangular solve
+    for (int jj = n - 1; jj >= 0; --jj) {
+        REAL sum = 0.0;
+        
+        for (unsigned p = l_col_ptr[jj] + 1; p < sym_c_ptr[jj + 1]; ++p) {
+            sum += val[p] * b[sym_r_idx[p]];
+        }
+        
+        b[jj] -= sum;
+    }
+
+    // Apply column permutation and scaling
+    if (mc64_scale) {
+        for (unsigned j = 0; j < n; ++j) {
+            unsigned p = cp[j];
+            x[j] = b[piv[p]] * cols[p];
+        }
+    } else {
+        for (unsigned j = 0; j < n; ++j) {
+            x[j] = b[piv[cp[j]]];
+        }
+    }
+
+    return x;
+}
+
+int Symbolic_Matrix::updateNicsLUFromSymbolicMatrix(SNicsLU* nicslu, const Symbolic_Matrix& A_sym) {
+    uint__t n, nnz;
+    n = A_sym.n;
+    nnz = A_sym.nnz;
+
+    // 检查nicslu结构是否已初始化
+    if (nicslu == NULL) {
+        return -1;
+    }
+
+    // 如果nicslu中已有矩阵数据，先释放
+    if (nicslu->ax != NULL) {
+        free(nicslu->ax);
+        nicslu->ax = NULL;
+    }
+    if (nicslu->ai != NULL) {
+        free(nicslu->ai);
+        nicslu->ai = NULL;
+    }
+    if (nicslu->ap != NULL) {
+        free(nicslu->ap);
+        nicslu->ap = NULL;
+    }
+    
+    // 分配新的内存空间
+    nicslu->ax = (double*)malloc(sizeof(double) * nnz);
+    nicslu->ai = (unsigned int*)malloc(sizeof(unsigned int) * nnz);
+    nicslu->ap = (unsigned int*)malloc(sizeof(unsigned int) * (n + 1));
+    
+    if (nicslu->ax == NULL || nicslu->ai == NULL || nicslu->ap == NULL) {
+        // 分配失败，清理内存
+        if (nicslu->ax != NULL) free(nicslu->ax);
+        if (nicslu->ai != NULL) free(nicslu->ai);
+        if (nicslu->ap != NULL) free(nicslu->ap);
+        return -2;
+    }
+
+    // 从Symbolic_Matrix中获取CSR格式数据
+    // 注意：这里假设sym_c_ptr和sym_r_idx存储的是对称矩阵的CSC格式
+    // 需要转换为CSR格式存入nicslu
+    
+    // 首先填充ap数组（行指针）
+    memcpy(nicslu->ap, A_sym.csr_r_ptr.data(), sizeof(unsigned int) * (n + 1));
+    
+    // 然后填充ai和ax数组（列索引和值）
+    if (!A_sym.csr_c_idx.empty() && !A_sym.val.empty()) {
+        // 如果有现成的CSR格式数据，直接使用
+        memcpy(nicslu->ai, A_sym.csr_c_idx.data(), sizeof(unsigned int) * nnz);
+        memcpy(nicslu->ax, A_sym.val.data(), sizeof(double) * nnz);
+    } else {
+        // 否则需要从对称格式转换
+        unsigned int idx = 0;
+        for (unsigned int i = 0; i < n; ++i) {
+            for (unsigned int p = A_sym.sym_c_ptr[i]; p < A_sym.sym_c_ptr[i + 1]; ++p) {
+                nicslu->ai[idx] = A_sym.sym_r_idx[p];
+                nicslu->ax[idx] = A_sym.val[p];
+                idx++;
+            }
+        }
+    }
+
+    // 更新nicslu的基本信息
+    nicslu->n = n;
+    nicslu->nnz = nnz;
+
+    return 0;
+}
+
+void Symbolic_Matrix::ExtractLUToSymbolicMatrix(SNicsLU *nicslu) {
+    sym_c_ptr.clear();
+    sym_r_idx.clear();
+    l_col_ptr.clear();
+    sym_c_ptr.push_back(0);
+
+    uint__t n = nicslu->n;
+    uint__t *ulen = nicslu->ulen;
+    uint__t *llen = nicslu->llen;
+    size_t *up = nicslu->up;
+    void *lu_array = nicslu->lu_array;
+
+    for (uint__t i = 0; i < n; ++i) {
+        // 收集U部分列索引（已排序）
+        uint__t *u_idx = (uint__t *)((byte__t *)lu_array + up[i]);
+        vector<uint__t> row(u_idx, u_idx + ulen[i]);
+
+        // 收集L部分列索引（需要排序）
+        uint__t *l_idx = (uint__t *)((byte__t *)lu_array + up[i] + ulen[i] * g_sp);
+        row.insert(row.end(), l_idx, l_idx + llen[i]);
+        sort(row.begin(), row.end());  // 关键：按fill_in要求排序
+
+        // 查找对角线位置
+        auto diag_pos = find(row.begin(), row.end(), i);
+        if (diag_pos != row.end()) {
+            l_col_ptr.push_back(sym_r_idx.size() + (diag_pos - row.begin()));
+        }
+
+        // 添加到全局数组
+        sym_r_idx.insert(sym_r_idx.end(), row.begin(), row.end());
+        sym_c_ptr.push_back(sym_r_idx.size());
+    }
+
+    nnz = sym_c_ptr.back();
+    m_out << "Symbolic nonzero: " << nnz << endl;
 }

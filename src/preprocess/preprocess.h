@@ -17,7 +17,10 @@ int preprocess( \
     IN__ SNicsLU *nicslu,\
 	OUT__ double **ax, \
 	OUT__ unsigned int **ai, \
-	OUT__ unsigned int **ap);
+	OUT__ unsigned int **ap, \
+	OUT__ double **ax_back, \
+	OUT__ unsigned int **ai_back, \
+	OUT__ unsigned int **ap_back);
 
 
 #ifdef __cplusplus

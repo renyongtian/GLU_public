@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
     nicslu = (SNicsLU *)malloc(sizeof(SNicsLU));
     NicsLU_Initialize(nicslu);
 
-    ret = NicsLU_ReadTripletColumnToSparse(matrixName, &n, &nnz, &ax, &ai, &ap);
+    ret = NicsLU_ReadTripletRowToSparse(matrixName, &n, &nnz, &ax, &ai, &ap);
     if (ret != NICS_OK) goto EXIT;
 
     x = (real__t *)malloc(sizeof(real__t)*(n+n));
@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
     NicsLU_Analyze(nicslu);
     printf("analysis time: %.8g\n", nicslu->stat[0]);
 
-    NicsLU_Factorize(nicslu);
+    NicsLU_Factorize2(nicslu);
     printf("factorization time: %.8g\n", nicslu->stat[1]);
 
     NicsLU_ReFactorize(nicslu, ax);
@@ -77,6 +77,33 @@ int main(int argc, char *argv[])
 
     NicsLU_Solve(nicslu, x);
     printf("substitution time: %.8g\n", nicslu->stat[3]);
+
+    FILE *fp = fopen("x_cpu.txt", "w");
+    if (fp == NULL) {
+        printf("Error: Cannot open file for writing solution vector\n");
+    } else {
+        for (uint__t i = 0; i < n; ++i) {
+            fprintf(fp, "%.6g\n", x[i]);
+        }
+        fclose(fp);
+        printf("Solution vector saved to 'x_cpu.txt'\n");
+    }
+
+    // printf("ax: ");
+    // for(uint__t i=0; i < nnz; ++i){
+    //     printf("%lf ", ax[i]);
+    // }
+    // printf("\nai: ");
+
+    // for(uint__t i=0; i < nnz; ++i){
+    //     printf("%d ", ai[i]);
+    // }
+    // printf("\nap: ");
+
+    // for(uint__t i=0; i < n + 1; ++i){
+    //     printf("%d ", ap[i]);
+    // }
+    // printf("\n");
 
     NicsLU_Residual(n, ax, ai, ap, x, b, &err, 1, 0);
     printf("Ax-b (1-norm): %.8g\n", err);

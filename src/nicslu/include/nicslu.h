@@ -177,7 +177,9 @@ int \
 int \
 	NicsLU_Factorize( \
 	INOUT__ SNicsLU *nicslu);
-
+int \
+	NicsLU_Factorize2( \
+	INOUT__ SNicsLU *nicslu);
 /*LU factorization, without partial pivoting*/
 /*before called, NicsLU_Factorize or NicsLU_Factorize_MT must be called at least once*/
 int \
@@ -286,7 +288,7 @@ int \
 /*the following routines are without the SNicsLU structure*/
 
 /*residual error = |Ax-b|*/
-/*1-norm(norm=1), 2-norm(norm=2), ¡Þ-norm(norm=other)*/
+/*1-norm(norm=1), 2-norm(norm=2), ï¿½ï¿½-norm(norm=other)*/
 /*mode=0:row mode, mode=1:column mode*/
 int \
 	NicsLU_Residual( \

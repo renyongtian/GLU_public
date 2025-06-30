@@ -9,9 +9,20 @@ PREPROCESS_LIBS = preprocess/preprocess.o nicslu/lib/nicslu.a nicslu/util/nicslu
 NVCC = nvcc
 CPP = g++
 EXE = lu_cmd
+# 调试模式配置
+DEBUG_CFLAGS = -O0 -g -m64 -Wall -std=c++11 $(LU_INC) -DGLU_DEBUG=${DEBUG}
+DEBUG_NVCCFLAGS = -O0 -g -G -arch=sm_80 -std=c++11 -Xcompiler $(LU_INC)
 
+# 默认使用发布模式（-O3），通过命令切换为调试模式
+ifeq ($(DEBUG), 1)
+    CFLAGS = $(DEBUG_CFLAGS)
+    NVCCFLAGS = $(DEBUG_NVCCFLAGS)
+else
+    CFLAGS = -O3 -m64 -Wall -std=c++11 $(LU_INC) -DGLU_DEBUG=${DEBUG}
+    NVCCFLAGS = -O3 -lineinfo -arch=sm_80 -std=c++11 -Xcompiler $(LU_INC)
+endif
 CFLAGS = -O3 -m64 -Wall -std=c++11 $(LU_INC) -DGLU_DEBUG=${DEBUG}
-NVCCFLAGS = -O3 -std=c++11 -Xcompiler $(LU_INC)
+NVCCFLAGS = -O3 -lineinfo -arch=sm_80 -std=c++11 -Xcompiler $(LU_INC)
 
 MAIN: $(EXE)
 
